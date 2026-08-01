@@ -1,0 +1,37 @@
+node_modules/
+dist/
+src-tauri/target*/
+src-tauri/gen/
+*.log
+.DS_Store
+
+# Third-party converters are installed locally and are never redistributed.
+FileToVox-win-x64/
+MeshToVox-v2.9/
+voxel-llm/
+
+# Local configuration, credentials, keys, and certificates.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.cer
+*.crt
+*.lnk
+secrets/
+
+# Local databases, caches, and generated user data.
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+.cache/
+.local/
+screenshots/private/
+.screenshots-webview*/
+.screenshot-runtime/
+release-assets/
