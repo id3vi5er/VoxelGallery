@@ -19,7 +19,7 @@ interface Props {
   onConverted: (path: string) => void;
 }
 
-const FILE_TO_VOX_PATH_KEY = "voxel-gallery.file-to-vox-path";
+const FILE_TO_VOX_PATH_KEY = "voxel-gallery.file-to-vox-executable.v2";
 const MESH_TO_VOX_PATH_KEY = "voxel-gallery.mesh-to-vox-path";
 const supportedExtensions = ["asc", "binvox", "csv", "ply", "png", "qb", "schematic", "tif", "xyz", "vox"];
 
@@ -97,7 +97,7 @@ export function ConvertersModal({ libraries, initialTool = "file", onClose, onCo
   const selectedLibrary = libraries.find((library) => library.id === libraryId);
 
   const chooseExecutable = async (kind: ConverterKind) => {
-    const expected = kind === "file" ? "FileToVox-GUI.exe" : "MeshToVox.exe";
+    const expected = kind === "file" ? "FileToVox.exe" : "MeshToVox.exe";
     const selection = await open({ multiple: false, directory: false, title: t("chooseExecutable", { name: expected }), filters: [{ name: expected, extensions: ["exe"] }] });
     if (typeof selection !== "string") return;
     if (!selection.toLowerCase().endsWith(expected.toLowerCase())) {
@@ -132,7 +132,7 @@ export function ConvertersModal({ libraries, initialTool = "file", onClose, onCo
   };
 
   const startConversion = async () => {
-    if (!fileToVoxPath) return setMessage({ type: "error", text: t("chooseFirst", { name: "FileToVox-GUI.exe" }) });
+    if (!fileToVoxPath) return setMessage({ type: "error", text: t("chooseFirst", { name: "FileToVox.exe" }) });
     if (!inputFolder && !inputPaths.length) return setMessage({ type: "error", text: t("chooseInputError") });
     if (!selectedLibrary) return setMessage({ type: "error", text: t("chooseLibraryError") });
     const nextJobId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -144,7 +144,7 @@ export function ConvertersModal({ libraries, initialTool = "file", onClose, onCo
       const result = await invoke<ConverterResult>("run_file_to_vox", {
         request: {
           jobId: nextJobId,
-          guiPath: fileToVoxPath,
+          executablePath: fileToVoxPath,
           inputPaths,
           inputFolder: inputFolder || null,
           outputPath: joinPath(selectedLibrary.path, safeOutputName(outputName)),
@@ -204,7 +204,7 @@ export function ConvertersModal({ libraries, initialTool = "file", onClose, onCo
         <main className="converter-body">
           <section className="converter-column">
             <h3>{t("programInput")}</h3>
-            <label className="path-picker"><span>FileToVox-GUI.exe</span><div><input value={fileToVoxPath} readOnly placeholder={t("chooseLocalInstall")} /><button type="button" onClick={() => void chooseExecutable("file")}>{t("choose")}</button></div></label>
+            <label className="path-picker"><span>FileToVox.exe</span><div><input value={fileToVoxPath} readOnly placeholder={t("chooseLocalInstall")} /><button type="button" onClick={() => void chooseExecutable("file")}>{t("choose")}</button></div></label>
             <div className="source-actions"><button type="button" onClick={() => void chooseInputFiles()}><CubeIcon /> {t("chooseFiles")}</button><button type="button" onClick={() => void chooseInputFolder()}><FolderPlusIcon /> {t("pngFolder")}</button></div>
             <div className="selected-source"><strong>{inputType ? inputType === "layers" ? t("pngLayers") : inputType.toUpperCase() : t("noInput")}</strong><span>{inputFolder || (inputPaths.length > 1 ? t("filesSelected", { count: inputPaths.length }) : inputPaths[0]) || "ASC, BINVOX, CSV, PLY, PNG, QB, SCHEMATIC, TIF, XYZ, VOX"}</span></div>
 

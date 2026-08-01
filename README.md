@@ -60,7 +60,9 @@ The native reader accepts individual files up to 512 MB. A preview is currently 
 
 ## AI voxel generation
 
-![AI voxel generation workspace](docs/screenshots/ai-generator.png)
+![AI voxel generator with a generated example voxel model](docs/screenshots/ai-generator.png)
+
+*The integrated AI workspace with a generated example voxel model, interactive preview, and model palette.*
 
 The built-in generator creates a model, previews it in the same 3D viewer, shows its palette, and saves it directly into a selected library.
 
@@ -78,13 +80,11 @@ API keys are only sent to the selected provider. A key is stored only when **Rem
 
 ## Optional converter integrations
 
-![FileToVox integration](docs/screenshots/converters.png)
-
 Voxel Gallery does **not** bundle, redistribute, or commit FileToVox, MeshToVox, or the supplied voxel-llm source project. These remain separate third-party tools with their own licenses and release channels.
 
 ### FileToVox
 
-[FileToVox](https://github.com/Zarbuz/FileToVox) is integrated through its original local executable. Download it from the [official FileToVox releases](https://github.com/Zarbuz/FileToVox/releases), open **Convert**, and select `FileToVox-GUI.exe`. `FileToVox.exe` and its runtime files must remain beside it.
+[FileToVox](https://github.com/Zarbuz/FileToVox) is integrated directly through its freely available original executable. Download it from the [official FileToVox releases](https://github.com/Zarbuz/FileToVox/releases), open **Convert**, and select `FileToVox.exe`. Keep the runtime files shipped with FileToVox beside the executable.
 
 The Gallery interface exposes the supplied FileToVox 1.16 workflow:
 
@@ -96,7 +96,7 @@ The Gallery interface exposes the supplied FileToVox 1.16 workflow:
 - Direct output into a selected Gallery library and automatic rescan after completion.
 - Live completion status, conversion log, and cancellation.
 
-FileToVox may display a Windows administrator prompt because the original converter requires elevation. Voxel Gallery passes a validated option list to the original elevated worker and never executes user-supplied command strings.
+FileToVox may display a Windows administrator prompt because the original converter requires elevation. Voxel Gallery therefore launches its own open-source elevated worker, passes a strictly validated option list directly to `FileToVox.exe`, captures its output, and supports cancellation. `FileToVox-GUI.exe` is neither required nor used.
 
 ### MeshToVox
 

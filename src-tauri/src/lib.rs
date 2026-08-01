@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
     sync::{Arc, Mutex},
-    time::UNIX_EPOCH,
+    thread,
+    time::{Duration, UNIX_EPOCH},
 };
 use tauri::{Manager, State};
 use walkdir::WalkDir;
@@ -44,7 +45,7 @@ struct LlmHttpResponse {
 #[serde(rename_all = "camelCase")]
 struct FileToVoxRequest {
     job_id: String,
-    gui_path: String,
+    executable_path: String,
     input_paths: Vec<String>,
     input_folder: Option<String>,
     output_path: String,
@@ -67,14 +68,15 @@ struct ConverterResult {
     log: String,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct WorkerRequest {
-    #[serde(rename = "Arguments")]
+    executable_path: String,
     arguments: Vec<String>,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "PascalCase")]
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct WorkerResult {
     exit_code: i32,
     cancelled: bool,
@@ -278,7 +280,7 @@ fn locate_tool(app: &tauri::AppHandle, directory: &str, executable: &str) -> Opt
 #[tauri::command]
 fn discover_converter(app: tauri::AppHandle, kind: String) -> Result<Option<String>, String> {
     match kind.as_str() {
-        "file-to-vox" => Ok(locate_tool(&app, "FileToVox-win-x64", "FileToVox-GUI.exe")),
+        "file-to-vox" => Ok(locate_tool(&app, "FileToVox-win-x64", "FileToVox.exe")),
         "mesh-to-vox" => Ok(locate_tool(&app, "MeshToVox-v2.9", "MeshToVox.exe")),
         _ => Err("Unbekannter Konverter.".to_string()),
     }
@@ -304,6 +306,214 @@ fn add_option(arguments: &mut Vec<String>, option: &str, value: impl ToString) {
     arguments.push(value.to_string());
 }
 
+fn validate_file_to_vox_arguments(arguments: &[String]) -> Result<(), String> {
+    if arguments.is_empty() || arguments.len() > 24 {
+        return Err("Ungültige Anzahl von FileToVox-Argumenten.".to_string());
+    }
+    let mut seen = HashSet::new();
+    let mut index = 0;
+    while index < arguments.len() {
+        let option = arguments[index].as_str();
+        if !seen.insert(option.to_string()) {
+            return Err(format!("Doppelte FileToVox-Option: {option}"));
+        }
+        let takes_value = matches!(
+            option,
+            "--input"
+                | "--output"
+                | "--color-from-file"
+                | "--color-limit"
+                | "--chunk-size"
+                | "--heightmap"
+                | "--palette"
+                | "--grid-size"
+        );
+        let is_flag = matches!(
+            option,
+            "--color" | "--excavate" | "--debug" | "--disable-quantization"
+        );
+        if !takes_value && !is_flag {
+            return Err(format!("Nicht erlaubte FileToVox-Option: {option}"));
+        }
+        if takes_value {
+            let value = arguments
+                .get(index + 1)
+                .filter(|value| !value.is_empty() && value.len() <= 32_767)
+                .ok_or_else(|| format!("Wert für {option} fehlt."))?;
+            match option {
+                "--color-limit" => {
+                    let value = value
+                        .parse::<u16>()
+                        .map_err(|_| "Das Farblimit ist ungültig.".to_string())?;
+                    if !(1..=256).contains(&value) {
+                        return Err("Das Farblimit muss zwischen 1 und 256 liegen.".to_string());
+                    }
+                }
+                "--chunk-size" => {
+                    let value = value
+                        .parse::<u16>()
+                        .map_err(|_| "Die Chunk-Größe ist ungültig.".to_string())?;
+                    if !(11..=256).contains(&value) {
+                        return Err("Die Chunk-Größe muss zwischen 11 und 256 liegen.".to_string());
+                    }
+                }
+                "--heightmap" => {
+                    let value = value
+                        .parse::<u16>()
+                        .map_err(|_| "Die Höhenkarte ist ungültig.".to_string())?;
+                    if !(1..=1000).contains(&value) {
+                        return Err("Die Höhenkarte muss zwischen 1 und 1000 liegen.".to_string());
+                    }
+                }
+                "--grid-size" => {
+                    let value = value
+                        .parse::<f64>()
+                        .map_err(|_| "Die Rastergröße ist ungültig.".to_string())?;
+                    if !value.is_finite() || !(10.0..=2000.0).contains(&value) {
+                        return Err("Die Rastergröße muss zwischen 10 und 2000 liegen.".to_string());
+                    }
+                }
+                _ => {}
+            }
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+    if !seen.contains("--input") || !seen.contains("--output") {
+        return Err("FileToVox benötigt Eingabe und Ausgabe.".to_string());
+    }
+    Ok(())
+}
+
+fn worker_job_directory(request_path: &Path) -> Result<PathBuf, String> {
+    let canonical = fs::canonicalize(request_path)
+        .map_err(|error| format!("Worker-Anforderung nicht gefunden: {error}"))?;
+    if canonical.file_name().and_then(|name| name.to_str()) != Some("request.json") {
+        return Err("Ungültiger Name der Worker-Anforderung.".to_string());
+    }
+    let job_directory = canonical
+        .parent()
+        .ok_or_else(|| "Worker-Anforderung hat keinen Job-Ordner.".to_string())?;
+    let jobs_root = fs::canonicalize(std::env::temp_dir().join("VoxelGallery-FileToVox"))
+        .map_err(|error| format!("Worker-Stammordner fehlt: {error}"))?;
+    if job_directory.parent() != Some(jobs_root.as_path())
+        || !job_directory
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| {
+                !name.is_empty()
+                    && name
+                        .chars()
+                        .all(|character| character.is_ascii_alphanumeric() || character == '-')
+            })
+    {
+        return Err("Worker-Anforderung liegt außerhalb des erlaubten Job-Ordners.".to_string());
+    }
+    Ok(job_directory.to_path_buf())
+}
+
+fn run_file_to_vox_worker_inner(request_path: &Path) -> Result<WorkerResult, String> {
+    let job_directory = worker_job_directory(request_path)?;
+    let request: WorkerRequest = serde_json::from_slice(
+        &fs::read(request_path)
+            .map_err(|error| format!("Worker-Anforderung konnte nicht gelesen werden: {error}"))?,
+    )
+    .map_err(|error| format!("Worker-Anforderung ist ungültig: {error}"))?;
+    validate_file_to_vox_arguments(&request.arguments)?;
+    let executable = existing_file(&request.executable_path, "FileToVox.exe")?;
+    if !executable
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.eq_ignore_ascii_case("FileToVox.exe"))
+    {
+        return Err("Der Worker darf ausschließlich FileToVox.exe starten.".to_string());
+    }
+
+    let stdout_path = job_directory.join("stdout.log");
+    let stderr_path = job_directory.join("stderr.log");
+    let stdout = fs::File::create(&stdout_path)
+        .map_err(|error| format!("Standardausgabe konnte nicht geöffnet werden: {error}"))?;
+    let stderr = fs::File::create(&stderr_path)
+        .map_err(|error| format!("Fehlerausgabe konnte nicht geöffnet werden: {error}"))?;
+    let mut command = Command::new(&executable);
+    command
+        .args(&request.arguments)
+        .current_dir(executable.parent().unwrap_or(Path::new(".")))
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr));
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x0800_0000);
+    }
+    let mut process = command
+        .spawn()
+        .map_err(|error| format!("FileToVox.exe konnte nicht gestartet werden: {error}"))?;
+    let cancel_path = job_directory.join("cancel");
+    let (exit_code, cancelled) = loop {
+        if let Some(status) = process
+            .try_wait()
+            .map_err(|error| format!("FileToVox-Status konnte nicht gelesen werden: {error}"))?
+        {
+            break (status.code().unwrap_or(-1), false);
+        }
+        if cancel_path.is_file() {
+            let _ = process.kill();
+            let status = process
+                .wait()
+                .map_err(|error| format!("FileToVox-Abbruch fehlgeschlagen: {error}"))?;
+            break (status.code().unwrap_or(-1), true);
+        }
+        thread::sleep(Duration::from_millis(100));
+    };
+
+    let stdout = String::from_utf8_lossy(&fs::read(stdout_path).unwrap_or_default()).into_owned();
+    let stderr = String::from_utf8_lossy(&fs::read(stderr_path).unwrap_or_default()).into_owned();
+    let mut log = stdout;
+    if !stderr.trim().is_empty() {
+        if !log.ends_with('\n') && !log.is_empty() {
+            log.push('\n');
+        }
+        log.push_str("[STDERR]\n");
+        log.push_str(&stderr);
+    }
+    fs::write(job_directory.join("conversion.log"), log).map_err(|error| {
+        format!("Konvertierungsprotokoll konnte nicht gespeichert werden: {error}")
+    })?;
+    Ok(WorkerResult {
+        exit_code,
+        cancelled,
+        error: None,
+    })
+}
+
+pub fn run_file_to_vox_worker(request_path: &str) -> i32 {
+    let path = PathBuf::from(request_path);
+    let job_directory = match worker_job_directory(&path) {
+        Ok(directory) => directory,
+        Err(_) => return 10,
+    };
+    let result_path = job_directory.join("result.json");
+    let result = match run_file_to_vox_worker_inner(&path) {
+        Ok(result) => result,
+        Err(error) => WorkerResult {
+            exit_code: -1,
+            cancelled: false,
+            error: Some(error),
+        },
+    };
+    match serde_json::to_vec(&result)
+        .map_err(|error| error.to_string())
+        .and_then(|bytes| fs::write(result_path, bytes).map_err(|error| error.to_string()))
+    {
+        Ok(()) if result.error.is_none() => 0,
+        Ok(()) => 12,
+        Err(_) => 11,
+    }
+}
+
 fn execute_file_to_vox(
     request: FileToVoxRequest,
     jobs: Arc<Mutex<HashMap<String, PathBuf>>>,
@@ -317,20 +527,13 @@ fn execute_file_to_vox(
         return Err("Ungültige Job-ID.".to_string());
     }
 
-    let gui_path = existing_file(&request.gui_path, "FileToVox-GUI.exe")?;
-    if !gui_path
+    let tool_path = existing_file(&request.executable_path, "FileToVox.exe")?;
+    if !tool_path
         .file_name()
         .and_then(|name| name.to_str())
-        .is_some_and(|name| name.eq_ignore_ascii_case("FileToVox-GUI.exe"))
+        .is_some_and(|name| name.eq_ignore_ascii_case("FileToVox.exe"))
     {
-        return Err("Bitte FileToVox-GUI.exe auswählen.".to_string());
-    }
-    let tool_path = gui_path
-        .parent()
-        .unwrap_or(Path::new(""))
-        .join("FileToVox.exe");
-    if !tool_path.is_file() {
-        return Err("FileToVox.exe muss neben FileToVox-GUI.exe liegen.".to_string());
+        return Err("Bitte FileToVox.exe auswählen.".to_string());
     }
 
     let input = if let Some(folder) = request.input_folder.as_ref() {
@@ -416,23 +619,30 @@ fn execute_file_to_vox(
     let request_path = job_dir.join("request.json");
     let result_path = job_dir.join("result.json");
     let log_path = job_dir.join("conversion.log");
+    validate_file_to_vox_arguments(&arguments)?;
     fs::write(
         &request_path,
-        serde_json::to_vec(&WorkerRequest { arguments }).map_err(|error| error.to_string())?,
+        serde_json::to_vec(&WorkerRequest {
+            executable_path: tool_path.to_string_lossy().to_string(),
+            arguments,
+        })
+        .map_err(|error| error.to_string())?,
     )
     .map_err(|error| error.to_string())?;
     jobs.lock()
         .map_err(|_| "Konverterstatus ist nicht verfügbar.".to_string())?
         .insert(request.job_id.clone(), job_dir.clone());
 
+    let worker_executable = std::env::current_exe()
+        .map_err(|error| format!("Voxel-Gallery-Worker wurde nicht gefunden: {error}"))?;
     let mut powershell = Command::new("powershell.exe");
     powershell.args([
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            "$process = Start-Process -FilePath $env:VG_FILETOVOX_GUI -ArgumentList '--elevated-worker',$env:VG_FILETOVOX_REQUEST -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $process.ExitCode",
+            "$process = Start-Process -FilePath $env:VG_FILETOVOX_WORKER -ArgumentList '--file-to-vox-worker',$env:VG_FILETOVOX_REQUEST -Verb RunAs -WindowStyle Hidden -Wait -PassThru; exit $process.ExitCode",
         ])
-        .env("VG_FILETOVOX_GUI", &gui_path)
+        .env("VG_FILETOVOX_WORKER", worker_executable)
         .env("VG_FILETOVOX_REQUEST", &request_path);
     #[cfg(target_os = "windows")]
     {
@@ -554,7 +764,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::is_vox_file;
+    use super::{is_vox_file, validate_file_to_vox_arguments};
     use std::path::Path;
 
     #[test]
@@ -562,5 +772,35 @@ mod tests {
         assert!(is_vox_file(Path::new("model.vox")));
         assert!(is_vox_file(Path::new("MODEL.VOX")));
         assert!(!is_vox_file(Path::new("model.vox.png")));
+    }
+
+    #[test]
+    fn accepts_only_the_supported_file_to_vox_argument_surface() {
+        let valid = [
+            "--input",
+            "C:\\input.png",
+            "--output",
+            "C:\\output.vox",
+            "--color",
+            "--color-limit",
+            "64",
+            "--chunk-size",
+            "128",
+            "--excavate",
+        ]
+        .map(str::to_string);
+        assert!(validate_file_to_vox_arguments(&valid).is_ok());
+
+        let unknown = ["--input", "in.png", "--output", "out.vox", "--shell"].map(str::to_string);
+        assert!(validate_file_to_vox_arguments(&unknown).is_err());
+
+        let missing_value = ["--input", "in.png", "--output"].map(str::to_string);
+        assert!(validate_file_to_vox_arguments(&missing_value).is_err());
+
+        let duplicate = [
+            "--input", "one.png", "--input", "two.png", "--output", "out.vox",
+        ]
+        .map(str::to_string);
+        assert!(validate_file_to_vox_arguments(&duplicate).is_err());
     }
 }
