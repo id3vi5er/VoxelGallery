@@ -13,7 +13,7 @@
 
 </div>
 
-![Voxel Gallery overview](docs/screenshots/overview.png)
+![Voxel Gallery home](docs/screenshots/home.png)
 
 Voxel Gallery turns folders full of voxel assets into a visual, searchable library. Add any number of Windows folders, let the app generate thumbnails, inspect every model in an interactive 3D viewer, explore its palette, generate new assets with an LLM, or convert existing source files through optional third-party tools.
 
