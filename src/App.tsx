@@ -7,8 +7,9 @@ import { isTauri } from "./lib/tauri";
 import { VoxelCard } from "./components/VoxelCard";
 import { ViewerModal } from "./components/ViewerModal";
 import { GeneratorModal } from "./components/GeneratorModal";
+import { LandscapeModal } from "./components/LandscapeModal";
 import { ConvertersModal } from "./components/ConvertersModal";
-import { CloseIcon, CubeIcon, FolderPlusIcon, GridIcon, RefreshIcon, SearchIcon, SettingsIcon, TrashIcon, WandIcon } from "./components/icons";
+import { CloseIcon, CubeIcon, FolderPlusIcon, GridIcon, RefreshIcon, SearchIcon, SettingsIcon, TrashIcon, TreeIcon, WandIcon } from "./components/icons";
 import { useI18n } from "./lib/i18n";
 import { colorSimilarityDistance } from "./vox/colorSimilarity";
 
@@ -34,6 +35,7 @@ export default function App() {
   const [assetColors, setAssetColors] = useState<Map<string, AssetColorMetadata>>(new Map());
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [generatorOpen, setGeneratorOpen] = useState(false);
+  const [landscapeOpen, setLandscapeOpen] = useState(false);
   const [convertersOpen, setConvertersOpen] = useState(false);
   const [hideUnreadable, setHideUnreadable] = useState(() => localStorage.getItem("voxel-gallery.hide-unreadable") === "true");
   const [infiniteScroll, setInfiniteScroll] = useState(() => localStorage.getItem("voxel-gallery.infinite-scroll") === "true");
@@ -194,6 +196,7 @@ export default function App() {
           <label className="search-box"><SearchIcon /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("search")} /></label>
           <div className="topbar-actions">
             <button className="ai-button" type="button" title={t("aiCreate")} onClick={() => setGeneratorOpen(true)}><WandIcon /> {t("aiCreate")}</button>
+            <button className="landscape-button" type="button" title={t("landscapeTitle")} onClick={() => setLandscapeOpen(true)}><TreeIcon /> {t("landscapeCreate")}</button>
             <button className="tools-button" type="button" title="FileToVox & MeshToVox" onClick={() => setConvertersOpen(true)}><GridIcon /> {t("convert")}</button>
             <button className={`refresh-button ${isScanning ? "spinning" : ""}`} type="button" onClick={refreshLibraries} disabled={isScanning} title={t("refreshLibraries")}><RefreshIcon /></button>
             <button className="refresh-button" type="button" onClick={() => setSettingsOpen(true)} title={t("gallerySettings")}><SettingsIcon /></button>
@@ -240,6 +243,7 @@ export default function App() {
       {notice && <div className="toast">{notice}</div>}
       {viewerAsset && <ViewerModal asset={viewerAsset} onClose={() => setViewerAsset(null)} />}
       {generatorOpen && <GeneratorModal libraries={libraries} onClose={() => setGeneratorOpen(false)} onSaved={(path) => { setGeneratorOpen(false); setNotice(t("saved", { path })); void rescan(); }} />}
+      {landscapeOpen && <LandscapeModal libraries={libraries} onClose={() => setLandscapeOpen(false)} onSaved={(path) => { setLandscapeOpen(false); setNotice(t("saved", { path })); void rescan(); }} />}
       {convertersOpen && <ConvertersModal libraries={libraries} onClose={() => setConvertersOpen(false)} onConverted={(path) => { setNotice(t("converted", { path })); void rescan(); }} />}
       {settingsOpen && (
         <div className="preferences-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setSettingsOpen(false)}>

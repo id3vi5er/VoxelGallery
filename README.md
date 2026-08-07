@@ -9,13 +9,13 @@
 ![Tauri](https://img.shields.io/badge/Tauri-2-24c8db?style=flat-square&logo=tauri&logoColor=white)
 ![Local first](https://img.shields.io/badge/data-local--first-4caf86?style=flat-square)
 
-[Download](https://github.com/id3vi5er/VoxelGallery/releases/latest) · [Features](#features) · [AI generation](#ai-voxel-generation) · [Converters](#optional-converter-integrations) · [Build from source](#build-from-source)
+[Download](https://github.com/id3vi5er/VoxelGallery/releases/latest) · [Features](#features) · [AI generation](#ai-voxel-generation) · [Landscapes](#procedural-landscapes--tree-generator) · [Converters](#optional-converter-integrations) · [Build from source](#build-from-source)
 
 </div>
 
 ![Voxel Gallery home](docs/screenshots/home.png)
 
-Voxel Gallery turns folders full of voxel assets into a visual, searchable library. Add any number of Windows folders, let the app generate thumbnails, inspect every model in an interactive 3D viewer, explore its palette, generate new assets with an LLM, or convert existing source files through optional third-party tools.
+Voxel Gallery turns folders full of voxel assets into a visual, searchable library. Add any number of Windows folders, let the app generate thumbnails, inspect every model in an interactive 3D viewer, explore its palette, generate new assets with an LLM, build complete procedural landscapes, or convert existing source files through optional third-party tools.
 
 ## Download
 
@@ -77,6 +77,45 @@ Available providers:
 You can set exact X/Y/Z dimensions from 1 to 64, choose the amount of detail, and add style, color, or shape instructions to refine the prompt. Generated output is schema-validated and limited to 50,000 voxels before it is exported as a MagicaVoxel v150 file.
 
 API keys are only sent to the selected provider. A key is stored only when **Remember API key on this device** is enabled, and then only in the local WebView storage on that computer. Keys are never written into the repository, project files, or generated VOX files.
+
+## Procedural landscapes — Tree Generator
+
+The **Landscape** workspace builds complete `.vox` terrains from algorithms and adjustable variables. It runs entirely offline and deterministically: the same seed and the same settings always produce byte-identical output.
+
+### Terrain
+
+Six height field algorithms, each fed by seeded value noise with configurable octaves, persistence, lacunarity, and domain warp:
+
+| Algorithm | Method |
+| --- | --- |
+| Hills | fractal Brownian motion |
+| Mountains | ridged multifractal |
+| Plains | damped low-amplitude noise |
+| Islands | fBm with a radial falloff |
+| Canyon | inverted ridges with plateau terracing |
+| Dunes | wave field modulated by noise drift |
+
+The field is normalized across its full range, smoothed, redistributed through a height curve, optionally terraced, and finally shaped by thermal erosion passes. Materials are chosen per column from height, slope, and a separate moisture field: deep water, water, sand, soil, three grass shades, gravel, stone, and snow above the snow line. A configurable crust depth keeps the model hollow while automatically reaching below the lowest neighbor so cliff faces stay closed.
+
+### Trees
+
+Five tree algorithms, plus a mixed forest mode that picks per location from altitude and proximity to water:
+
+- **Recursive branching** — parametric 3D branching with branch count, spread angle, and length falloff per level.
+- **L-system** — 3D turtle interpretation of a rewritten string with yaw, pitch, roll, and a branch stack.
+- **Conifer** — a straight trunk with stacked, drooping branch whorls.
+- **Palm** — a curved trunk with arching fronds.
+- **Dead wood** — recursive branching without foliage.
+
+Every skeleton is generated in relative units, scaled to the wanted tree height, and then rasterized with thickness-aware branches and thinned-out crowns. Placement uses a jittered grid filtered by slope, tree line, ground material, and the moisture field.
+
+Boulders, grass tufts, and flowers can be scattered on top, and a season setting (spring, summer, autumn, winter) recolors foliage, grass, and blossoms.
+
+### Scale
+
+A voxel can represent anything from **10 m down to 0.1 m**. All lengths in the workspace are metric — feature size, crust depth, beach width, tree height, crown radius, and trunk radius — and are converted to voxels for the selected scale. The same 96³ grid is therefore either a 96 m landscape with 8–16 m trees, or a 24 m clearing in which those same trees are 32–64 voxels tall.
+
+Seven presets (forest valley, high alpine, tropical island, desert dunes, canyon, autumn woods, winter taiga) provide starting points, and the preview updates automatically while you move the sliders. Maps are limited to 256 voxels per axis because VOX stores coordinates as single bytes; the report panel shows the voxel count, visible faces, and resulting file size before saving.
 
 ## Optional converter integrations
 
@@ -160,7 +199,8 @@ Build artifacts are written below `src-tauri/target/release`. Third-party conver
 | `src/vox` | Binary VOX parser, palette analysis, scene handling, and bounded surface meshing |
 | `src/three` | Shared Three.js renderer and thumbnail pipeline |
 | `src/generator` | Provider clients, schema validation, offline generation, and VOX export |
-| `src/components` | Gallery, viewer, AI workspace, settings, and converter interfaces |
+| `src/generator/landscape` | Seeded noise, terrain algorithms, tree algorithms, scatter, and metric scaling |
+| `src/components` | Gallery, viewer, AI workspace, landscape workspace, settings, and converter interfaces |
 | `src/lib` | Library state, Tauri IPC, scene loading, and IndexedDB thumbnail metadata |
 | `src-tauri` | Safe Windows filesystem access, binary transport, HTTP relay, saving, and local tool launching |
 
