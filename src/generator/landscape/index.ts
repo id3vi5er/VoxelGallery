@@ -54,7 +54,10 @@ function plantTrees(
   const before = grid.voxelCount;
   const { sizeX, sizeY, heights, slope, moisture, waterZ } = field;
   const sizeZ = settings.size.z;
-  const spacing = Math.max(2, Math.round(17 - settings.trees.density * 14));
+  // Spacing is a real world distance. As a voxel count it capped out at 17 voxels,
+  // which is 1.7 m at a fine scale — every setting produced an impenetrable thicket.
+  const spacingMeters = 17 - settings.trees.density * 14;
+  const spacing = Math.max(2, Math.round(spacingMeters / settings.metersPerVoxel));
   const treeLineZ = settings.trees.treeLine * sizeZ;
   const groundMaterials = new Set([
     materialIndex.grass, materialIndex.grassDark, materialIndex.grassLight,

@@ -344,6 +344,12 @@ export function growTree(
   const spread = skeletonSpread(skeleton.segments);
   const lateralScale = spread > 0.001 ? canopy / spread : verticalScale;
 
+  // The tips share one canopy, so n blobs of radius r fill a sphere of radius R when
+  // r ≈ R / ∛n. Without this a deep tree gave every one of its 81 tips a blob nearly
+  // the size of the whole crown, which at a fine scale is millions of wasted voxels.
+  const tips = skeleton.segments.reduce((count, segment) => count + (segment.leafScale > 0 ? 1 : 0), 0);
+  const tipRadius = canopy / Math.cbrt(Math.max(1, tips)) * 1.6;
+
   const place = (point: Vec3): Vec3 =>
     vec(base.x + point.x * lateralScale, base.y + point.y * lateralScale, base.z + point.z * verticalScale);
 
@@ -356,7 +362,7 @@ export function growTree(
       // Foliage wraps its own twig, so the cost follows the branch length and the
       // union of all tips forms the canopy.
       const length = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
-      const blob = Math.min(canopy, Math.max(1, length * 1.15 * segment.leafScale));
+      const blob = Math.max(1, Math.min(tipRadius, length * 1.15) * segment.leafScale);
       leafCluster(grid, b, blob, leafFill, rng, material);
     }
   }

@@ -361,7 +361,13 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
             >
               {TREE_ALGORITHMS.map((item) => <option key={item.value} value={item.value}>{t(item.labelKey)}</option>)}
             </select>
-            <Slider label={t("lsDensity")} value={settings.trees.density} limit={limits.density} onChange={(density) => updateTrees({ density })} display={percent(settings.trees.density)} />
+            <Slider
+              label={t("lsDensity")}
+              value={settings.trees.density}
+              limit={limits.density}
+              onChange={(density) => updateTrees({ density })}
+              display={t("lsSpacing", { meters: Number((17 - settings.trees.density * 14).toFixed(1)) })}
+            />
             <Slider label={t("lsMinHeight")} value={settings.trees.minHeight} limit={limits.treeHeight} onChange={(minHeight) => updateTrees({ minHeight })} display={metric(settings.trees.minHeight)} />
             <Slider label={t("lsMaxHeight")} value={settings.trees.maxHeight} limit={limits.treeHeight} onChange={(maxHeight) => updateTrees({ maxHeight })} display={metric(settings.trees.maxHeight)} />
             <Slider label={t("lsIterations")} value={settings.trees.iterations} limit={limits.iterations} onChange={(iterations) => updateTrees({ iterations })} />

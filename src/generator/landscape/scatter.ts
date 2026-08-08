@@ -15,17 +15,22 @@ export function scatterDetails(
   const before = grid.voxelCount;
   const { sizeX, sizeY, heights, slope, waterZ } = field;
   const columns = sizeX * sizeY;
+  const perVoxel = settings.metersPerVoxel;
+  const toVoxels = (meters: number) => meters / perVoxel;
 
-  const rockCount = Math.round((columns / 900) * settings.scatter.rocks * 12);
+  // Boulders are real objects: both how many fit on the covered ground and how large
+  // they are follow the world, not the voxel count.
+  const worldArea = columns * perVoxel * perVoxel;
+  const rockCount = Math.round((worldArea / 900) * settings.scatter.rocks * 12);
   for (let index = 0; index < rockCount; index += 1) {
     const x = rng.int(1, sizeX - 2);
     const y = rng.int(1, sizeY - 2);
     const column = x + y * sizeX;
     const height = heights[column];
     if (waterZ > 0 && height <= waterZ) continue;
-    const radiusX = rng.range(1, 2.6);
-    const radiusY = rng.range(1, 2.6);
-    const radiusZ = rng.range(0.8, 2.1);
+    const radiusX = toVoxels(rng.range(1, 2.6));
+    const radiusY = toVoxels(rng.range(1, 2.6));
+    const radiusZ = toVoxels(rng.range(0.8, 2.1));
     const baseZ = height - 1;
     for (let dz = -1; dz <= Math.ceil(radiusZ); dz += 1) {
       for (let dy = -Math.ceil(radiusY); dy <= Math.ceil(radiusY); dy += 1) {
