@@ -159,6 +159,15 @@ export function buildTerrainField(settings: LandscapeSettings, seed: number): Te
   const slope = new Float32Array(sizeX * sizeY);
   const moisture = new Float32Array(sizeX * sizeY);
   const moistureScale = Math.max(6, settings.terrain.scale * 0.75);
+  // Relief is a share of the model height while feature size is absolute, so a taller
+  // model puts the same hills on a much steeper gradient. Measuring steepness against
+  // this terrain's own typical rise keeps the slope limit meaningful at any map size —
+  // otherwise raising Z alone would push most of the map past the limit and leave it
+  // treeless.
+  const typicalRise = Math.max(
+    2,
+    (settings.terrain.amplitude * sizeZ) / Math.max(4, settings.terrain.scale) * 3,
+  );
   for (let y = 0; y < sizeY; y += 1) {
     for (let x = 0; x < sizeX; x += 1) {
       const index = x + y * sizeX;
@@ -168,7 +177,7 @@ export function buildTerrainField(settings: LandscapeSettings, seed: number): Te
       if (x < sizeX - 1) maximum = Math.max(maximum, Math.abs(here - heights[index + 1]));
       if (y > 0) maximum = Math.max(maximum, Math.abs(here - heights[index - sizeX]));
       if (y < sizeY - 1) maximum = Math.max(maximum, Math.abs(here - heights[index + sizeX]));
-      slope[index] = clamp01(maximum / 5);
+      slope[index] = clamp01(maximum / typicalRise);
       moisture[index] = valueNoise2D(x / moistureScale, y / moistureScale, seed + 5171);
     }
   }

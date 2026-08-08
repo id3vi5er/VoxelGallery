@@ -63,12 +63,24 @@ function plantTrees(
   let shortened = 0;
   let skipped = 0;
 
-  planting: for (let cellY = 2; cellY < sizeY - 2; cellY += spacing) {
-    for (let cellX = 2; cellX < sizeX - 2; cellX += spacing) {
+  // Visit the placement grid in random order. Planting stops once the tree count or
+  // the voxel budget runs out, and walking the grid row by row would spend the whole
+  // budget on the first rows and leave the rest of the map bare on one side.
+  const cells: number[] = [];
+  for (let cellY = 2; cellY < sizeY - 2; cellY += spacing) {
+    for (let cellX = 2; cellX < sizeX - 2; cellX += spacing) cells.push(cellX + cellY * sizeX);
+  }
+  for (let index = cells.length - 1; index > 0; index -= 1) {
+    const swap = rng.int(0, index);
+    [cells[index], cells[swap]] = [cells[swap], cells[index]];
+  }
+
+  planting: {
+    for (const cell of cells) {
       if (trees >= MAX_TREES || grid.voxelCount > MAX_SAVE_VOXELS) break planting;
       const offset = settings.trees.jitter * spacing * 0.5;
-      const x = Math.round(cellX + rng.jitter() * offset);
-      const y = Math.round(cellY + rng.jitter() * offset);
+      const x = Math.round((cell % sizeX) + rng.jitter() * offset);
+      const y = Math.round(Math.floor(cell / sizeX) + rng.jitter() * offset);
       if (x < 2 || y < 2 || x >= sizeX - 2 || y >= sizeY - 2) continue;
 
       const column = x + y * sizeX;

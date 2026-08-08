@@ -164,6 +164,36 @@ describe("landscape generator", () => {
     expect(Date.now() - started).toBeLessThan(5000);
   });
 
+  it("keeps planting across the whole map as the model grows taller", () => {
+    // Relief is a share of the model height, so a taller map puts the same hills on a
+    // steeper gradient. The slope limit must not turn that into a treeless map.
+    const counts = [96, 128, 256].map((axis) => {
+      const result = generateLandscape({
+        ...DEFAULT_LANDSCAPE_SETTINGS,
+        seed: "tall",
+        size: { x: axis, y: axis, z: axis },
+      });
+      return { axis, ...result.stats };
+    });
+    for (const entry of counts) expect(entry.trees, `${entry.axis}³`).toBeGreaterThan(20);
+    // More ground has to mean more trees, not fewer.
+    expect(counts[2].trees).toBeGreaterThan(counts[0].trees);
+  });
+
+  it("spreads trees over both halves of a large map", () => {
+    const result = generateLandscape({
+      ...DEFAULT_LANDSCAPE_SETTINGS,
+      seed: "halves",
+      size: { x: 192, y: 192, z: 192 },
+    });
+    const trunks = result.scene.voxels.filter((voxel) => voxel.color === 11 || voxel.color === 12);
+    const near = trunks.filter((voxel) => voxel.y < 96).length;
+    const far = trunks.filter((voxel) => voxel.y >= 96).length;
+    expect(near).toBeGreaterThan(0);
+    expect(far).toBeGreaterThan(0);
+    expect(Math.min(near, far) / Math.max(near, far)).toBeGreaterThan(0.25);
+  });
+
   it("keeps a metre based crust at least one voxel thick at coarse scales", () => {
     const result = generateLandscape(settings({
       seed: "crust",
