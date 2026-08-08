@@ -128,6 +128,42 @@ describe("landscape generator", () => {
       .toBeGreaterThan(coarse.stats.treeVoxels / Math.max(1, coarse.stats.trees));
   });
 
+  it("still plants trees when the model is too short for their full height", () => {
+    // 8 m trees need 80 voxels at 0.1 m per voxel but the model is only 32 tall.
+    const result = generateLandscape(settings({
+      seed: "short",
+      metersPerVoxel: 0.1,
+      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, density: 0.9 },
+    }));
+    expect(result.stats.trees).toBeGreaterThan(0);
+    expect(result.stats.treesShortened).toBeGreaterThan(0);
+    expect(result.scene.voxels.every((voxel) => voxel.z < 32)).toBe(true);
+  });
+
+  it("scales the canopy with the crown radius instead of every branch tip", () => {
+    const grow = (crownRadius: number) => generateLandscape(settings({
+      seed: "canopy",
+      size: { x: 64, y: 64, z: 64 },
+      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "recursive", density: 0.9, crownRadius },
+    }));
+    const small = grow(2);
+    const large = grow(9);
+    expect(large.stats.treeVoxels).toBeGreaterThan(small.stats.treeVoxels);
+    // Per tip spheres grew with the cube of the radius; a canopy must stay far below that.
+    expect(large.stats.treeVoxels).toBeLessThan(small.stats.treeVoxels * 30);
+  });
+
+  it("keeps fine scale generation fast enough for the live preview", () => {
+    const started = Date.now();
+    generateLandscape(settings({
+      seed: "fine",
+      size: { x: 64, y: 64, z: 128 },
+      metersPerVoxel: 0.1,
+      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "recursive", density: 0.6, crownRadius: 8 },
+    }));
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
+
   it("keeps a metre based crust at least one voxel thick at coarse scales", () => {
     const result = generateLandscape(settings({
       seed: "crust",

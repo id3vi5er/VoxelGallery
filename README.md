@@ -80,6 +80,10 @@ API keys are only sent to the selected provider. A key is stored only when **Rem
 
 ## Procedural landscapes — Tree Generator
 
+![Tree Generator workspace with a generated forest valley](docs/screenshots/landscape.png)
+
+*The Tree Generator with terrain and tree variables on the left, a live preview in the middle, and the generation report with the material palette on the right.*
+
 The **Landscape** workspace builds complete `.vox` terrains from algorithms and adjustable variables. It runs entirely offline and deterministically: the same seed and the same settings always produce byte-identical output.
 
 ### Terrain
@@ -107,11 +111,15 @@ Five tree algorithms, plus a mixed forest mode that picks per location from alti
 - **Palm** — a curved trunk with arching fronds.
 - **Dead wood** — recursive branching without foliage.
 
-Every skeleton is generated in relative units, scaled to the wanted tree height, and then rasterized with thickness-aware branches and thinned-out crowns. Placement uses a jittered grid filtered by slope, tree line, ground material, and the moisture field.
+Every skeleton is generated in relative units, scaled to the wanted tree height, and then rasterized with thickness-aware branches and thinned-out crowns. Placement uses a jittered grid filtered by slope, tree line, ground material, and the moisture field. Where the model is too short for the requested height in metres, trees grow shorter instead of disappearing, and the report counts how many were shortened or skipped.
 
 Boulders, grass tufts, and flowers can be scattered on top, and a season setting (spring, summer, autumn, winter) recolors foliage, grass, and blossoms.
 
 ### Scale
+
+![The same landscape at 0.25 m per voxel](docs/screenshots/landscape-scale.png)
+
+*The same seed and the same 96³ grid at 0.25 m per voxel: a 24 m clearing whose trees are tall enough to walk under.*
 
 A voxel can represent anything from **10 m down to 0.1 m**. All lengths in the workspace are metric — feature size, crust depth, beach width, tree height, crown radius, and trunk radius — and are converted to voxels for the selected scale. The same 96³ grid is therefore either a 96 m landscape with 8–16 m trees, or a 24 m clearing in which those same trees are 32–64 voxels tall.
 

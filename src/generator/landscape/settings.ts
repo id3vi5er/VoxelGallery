@@ -42,7 +42,7 @@ export const DEFAULT_LANDSCAPE_SETTINGS: LandscapeSettings = {
     branchSplit: 3,
     lengthFalloff: 0.74,
     trunkThickness: 1.2,
-    crownRadius: 3,
+    crownRadius: 5,
     leafDensity: 0.72,
     slopeLimit: 0.55,
     treeLine: 0.78,
@@ -171,7 +171,13 @@ export function toVoxelUnits(settings: LandscapeSettings): LandscapeSettings {
       // coarse scale would silently switch the terrain to an expensive solid fill.
       crustDepth: settings.terrain.crustDepth > 0 ? Math.max(1, Math.round(convert(settings.terrain.crustDepth))) : 0,
     },
-    water: { ...settings.water, beach: Math.round(convert(settings.water.beach)) },
+    water: {
+      ...settings.water,
+      // The beach is an elevation band above the water line. Converted to voxels it
+      // can otherwise swallow the whole terrain at fine scales and leave no ground
+      // that trees or scatter are allowed to use.
+      beach: Math.min(Math.round(convert(settings.water.beach)), Math.round(settings.size.z * 0.12)),
+    },
     trees: {
       ...settings.trees,
       minHeight: convert(settings.trees.minHeight),
@@ -217,7 +223,7 @@ export const LANDSCAPE_PRESETS: LandscapePreset[] = [
       snowLine: 0.6,
       terrain: { algorithm: "mountains", scale: 40, octaves: 6, persistence: 0.52, lacunarity: 2.1, amplitude: 0.82, baseHeight: 0.1, exponent: 1.35, warp: 0.5, terraces: 0, erosion: 3, crustDepth: 5 },
       water: { enabled: true, level: 0.14, beach: 1 },
-      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "conifer", density: 0.45, minHeight: 10, maxHeight: 20, treeLine: 0.5, slopeLimit: 0.5, crownRadius: 3.5 },
+      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "conifer", density: 0.45, minHeight: 10, maxHeight: 20, treeLine: 0.5, slopeLimit: 0.5, crownRadius: 6 },
       scatter: { rocks: 0.7, grass: 0.3, flowers: 0.1 },
     }),
   },
@@ -229,7 +235,7 @@ export const LANDSCAPE_PRESETS: LandscapePreset[] = [
       size: { x: 112, y: 112, z: 56 },
       terrain: { ...DEFAULT_LANDSCAPE_SETTINGS.terrain, algorithm: "islands", scale: 32, amplitude: 0.62, baseHeight: 0.02, exponent: 1.2, erosion: 2 },
       water: { enabled: true, level: 0.3, beach: 3 },
-      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "palm", density: 0.35, minHeight: 9, maxHeight: 17, treeLine: 0.7, crownRadius: 2 },
+      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "palm", density: 0.35, minHeight: 9, maxHeight: 17, treeLine: 0.7, crownRadius: 3.5 },
       scatter: { rocks: 0.3, grass: 0.4, flowers: 0.2 },
     }),
   },
@@ -242,7 +248,7 @@ export const LANDSCAPE_PRESETS: LandscapePreset[] = [
       snowLine: 1,
       terrain: { ...DEFAULT_LANDSCAPE_SETTINGS.terrain, algorithm: "dunes", scale: 34, octaves: 4, amplitude: 0.4, baseHeight: 0.14, exponent: 1, warp: 0.6, erosion: 1, crustDepth: 3 },
       water: { enabled: false, level: 0.12, beach: 2 },
-      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "palm", density: 0.08, minHeight: 8, maxHeight: 14, crownRadius: 2 },
+      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "palm", density: 0.08, minHeight: 8, maxHeight: 14, crownRadius: 3.5 },
       scatter: { rocks: 0.5, grass: 0.05, flowers: 0 },
     }),
   },
@@ -268,7 +274,7 @@ export const LANDSCAPE_PRESETS: LandscapePreset[] = [
       season: "autumn",
       terrain: { ...DEFAULT_LANDSCAPE_SETTINGS.terrain, algorithm: "hills", scale: 22, amplitude: 0.38, erosion: 3 },
       water: { enabled: true, level: 0.2, beach: 2 },
-      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "lsystem", density: 0.72, minHeight: 10, maxHeight: 18, branchAngle: 28, iterations: 3, crownRadius: 3.5, leafDensity: 0.68 },
+      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "lsystem", density: 0.72, minHeight: 10, maxHeight: 18, branchAngle: 28, iterations: 3, crownRadius: 6, leafDensity: 0.68 },
       scatter: { rocks: 0.3, grass: 0.6, flowers: 0.35 },
     }),
   },
@@ -282,7 +288,7 @@ export const LANDSCAPE_PRESETS: LandscapePreset[] = [
       snowLine: 0.45,
       terrain: { ...DEFAULT_LANDSCAPE_SETTINGS.terrain, algorithm: "hills", scale: 30, amplitude: 0.42, erosion: 2 },
       water: { enabled: true, level: 0.22, beach: 1 },
-      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "conifer", density: 0.62, minHeight: 9, maxHeight: 19, treeLine: 0.85, crownRadius: 3 },
+      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, algorithm: "conifer", density: 0.62, minHeight: 9, maxHeight: 19, treeLine: 0.85, crownRadius: 5 },
       scatter: { rocks: 0.35, grass: 0.2, flowers: 0.05 },
     }),
   },

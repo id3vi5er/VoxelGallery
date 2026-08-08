@@ -70,6 +70,15 @@ function skeletonHeight(segments: Segment[]): number {
   return Math.max(0.001, maximum);
 }
 
+/** Largest horizontal distance from the trunk axis — the natural canopy radius. */
+function skeletonSpread(segments: Segment[]): number {
+  let maximum = 0;
+  for (const segment of segments) {
+    maximum = Math.max(maximum, Math.hypot(segment.a.x, segment.a.y), Math.hypot(segment.b.x, segment.b.y));
+  }
+  return maximum;
+}
+
 // ---------------------------------------------------------------------------
 // Algorithms
 // ---------------------------------------------------------------------------
@@ -323,19 +332,32 @@ export function growTree(
 ): number {
   const before = grid.voxelCount;
   const skeleton = buildSkeleton(options.algorithm, settings, rng);
-  const factor = options.height / skeleton.height;
+  const verticalScale = options.height / skeleton.height;
   const base = vec(x, y, z);
   const trunkMaterial = options.algorithm === "dead" ? material.trunkDark : material.trunk;
-  const crown = Math.max(1, settings.crownRadius * (0.75 + rng.next() * 0.5));
   const leafFill = Math.min(1, Math.max(0.05, settings.leafDensity));
 
+  // The crown radius describes the canopy of the whole tree, so it stretches the
+  // skeleton sideways. Sizing each tip blob by it instead would make one sphere per
+  // branch tip, which both looks wrong and costs O(radius³) per tip at fine scales.
+  const canopy = Math.max(1, settings.crownRadius * (0.8 + rng.next() * 0.4));
+  const spread = skeletonSpread(skeleton.segments);
+  const lateralScale = spread > 0.001 ? canopy / spread : verticalScale;
+
+  const place = (point: Vec3): Vec3 =>
+    vec(base.x + point.x * lateralScale, base.y + point.y * lateralScale, base.z + point.z * verticalScale);
+
   for (const segment of skeleton.segments) {
-    const a = add(base, segment.a, factor);
-    const b = add(base, segment.b, factor);
+    const a = place(segment.a);
+    const b = place(segment.b);
     const radius = Math.max(0.35, settings.trunkThickness * segment.radius);
     drawBranch(grid, a, b, radius, segment.wood ? trunkMaterial : material.leafDark);
     if (segment.leafScale > 0) {
-      leafCluster(grid, b, crown * segment.leafScale, leafFill, rng, material);
+      // Foliage wraps its own twig, so the cost follows the branch length and the
+      // union of all tips forms the canopy.
+      const length = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+      const blob = Math.min(canopy, Math.max(1, length * 1.15 * segment.leafScale));
+      leafCluster(grid, b, blob, leafFill, rng, material);
     }
   }
   return grid.voxelCount - before;

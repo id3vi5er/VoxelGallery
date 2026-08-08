@@ -215,6 +215,11 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
   const metric = (value: number) => `${metres(value)} · ${Math.max(1, Math.round(value / perVoxel))} vx`;
   const palette = useMemo(() => result?.scene.palette ?? [], [result]);
   const tooManyVoxels = Boolean(stats && stats.voxels > MAX_SAVE_VOXELS);
+  // A tree height in metres turns into many voxels at a fine scale. Warn before the
+  // model height silently cuts every tree down, instead of leaving the map bare.
+  const treeVoxelHeight = settings.trees.minHeight / perVoxel;
+  const treesTooTall = settings.trees.enabled && treeVoxelHeight > settings.size.z * 0.6;
+  const neededZ = Math.min(MAX_AXIS, Math.ceil((treeVoxelHeight / 0.6) / 8) * 8);
   const percent = (value: number) => `${Math.round(value * 100)} %`;
 
   return (
@@ -357,6 +362,16 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
             <span>{t("lsAutoPreview")}</span>
           </label>
           {autoPreview && volume > AUTO_PREVIEW_VOLUME && <p className="landscape-hint">{t("lsAutoPaused")}</p>}
+          {treesTooTall && (
+            <p className="landscape-hint">
+              {t("lsTreesTooTall", {
+                meters: Number(settings.trees.minHeight.toFixed(1)),
+                voxels: Math.round(treeVoxelHeight),
+                z: settings.size.z,
+                needed: neededZ,
+              })}
+            </p>
+          )}
 
           <button className="generate-action" type="button" onClick={() => void generate(settings)} disabled={generating}>
             {generating ? <span className="spinner" /> : <TreeIcon />}
@@ -394,6 +409,9 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
               <div><dt>{t("lsStatWater")}</dt><dd>{stats.waterVoxels.toLocaleString(locale)}</dd></div>
               <div><dt>{t("lsStatTreeVoxels")}</dt><dd>{stats.treeVoxels.toLocaleString(locale)}</dd></div>
               <div><dt>{t("lsStatScatter")}</dt><dd>{stats.scatterVoxels.toLocaleString(locale)}</dd></div>
+              {(stats.treesShortened > 0 || stats.treesSkipped > 0) && (
+                <div><dt>{t("lsStatTreesCut")}</dt><dd>{stats.treesShortened.toLocaleString(locale)} / {stats.treesSkipped.toLocaleString(locale)}</dd></div>
+              )}
               <div><dt>{t("lsStatFaces")}</dt><dd>{stats.surfaceFaces.toLocaleString(locale)}</dd></div>
               <div><dt>{t("lsStatFile")}</dt><dd>{(stats.fileBytes / 1024 / 1024).toFixed(2)} MB</dd></div>
             </dl>

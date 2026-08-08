@@ -89,6 +89,10 @@ export interface LandscapeStats {
   treeVoxels: number;
   scatterVoxels: number;
   trees: number;
+  /** Trees that had to grow shorter than requested because the model ran out of height. */
+  treesShortened: number;
+  /** Locations with too little headroom for any tree at all. */
+  treesSkipped: number;
   surfaceFaces: number;
   fileBytes: number;
   durationMs: number;

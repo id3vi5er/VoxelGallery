@@ -46,8 +46,10 @@ function plantTrees(
   settings: LandscapeSettings,
   materialIndex: ReturnType<typeof buildLandscapePalette>["index"],
   rng: Rng,
-): { trees: number; voxels: number } {
-  if (!settings.trees.enabled || settings.trees.density <= 0) return { trees: 0, voxels: 0 };
+): { trees: number; voxels: number; shortened: number; skipped: number } {
+  if (!settings.trees.enabled || settings.trees.density <= 0) {
+    return { trees: 0, voxels: 0, shortened: 0, skipped: 0 };
+  }
   const before = grid.voxelCount;
   const { sizeX, sizeY, heights, slope, moisture, waterZ } = field;
   const sizeZ = settings.size.z;
@@ -58,6 +60,8 @@ function plantTrees(
     materialIndex.dirt, materialIndex.sand, materialIndex.gravel,
   ]);
   let trees = 0;
+  let shortened = 0;
+  let skipped = 0;
 
   planting: for (let cellY = 2; cellY < sizeY - 2; cellY += spacing) {
     for (let cellX = 2; cellX < sizeX - 2; cellX += spacing) {
@@ -76,10 +80,14 @@ function plantTrees(
       // Humid spots grow denser forests than dry ones.
       if (rng.next() > 0.35 + moisture[column] * 0.65) continue;
 
+      // A tall tree in metres needs many voxels at a fine scale. Rather than dropping
+      // every location that cannot hold the full height — which used to leave whole
+      // regions bare without saying so — grow a shorter tree and report the shortfall.
       const headroom = sizeZ - height - 2;
-      if (headroom < settings.trees.minHeight * 0.6) continue;
+      if (headroom < 4) { skipped += 1; continue; }
       const wanted = rng.range(settings.trees.minHeight, settings.trees.maxHeight + 1);
-      const treeHeight = Math.max(3, Math.min(wanted, headroom));
+      const treeHeight = Math.min(wanted, headroom);
+      if (treeHeight < wanted * 0.9) shortened += 1;
       const altitude = height / sizeZ;
       const nearWater = waterZ > 0 && height - waterZ <= settings.water.beach + 3;
       const algorithm = pickAlgorithm(settings, rng, altitude, nearWater);
@@ -87,7 +95,7 @@ function plantTrees(
       trees += 1;
     }
   }
-  return { trees, voxels: grid.voxelCount - before };
+  return { trees, voxels: grid.voxelCount - before, shortened, skipped };
 }
 
 export function generateLandscape(input: LandscapeSettings): LandscapeResult {
@@ -132,6 +140,8 @@ export function generateLandscape(input: LandscapeSettings): LandscapeResult {
       treeVoxels: treeResult.voxels,
       scatterVoxels,
       trees: treeResult.trees,
+      treesShortened: treeResult.shortened,
+      treesSkipped: treeResult.skipped,
       surfaceFaces,
       fileBytes: voxels.length * 4 + 1100,
       durationMs: Math.round(finished - started),
