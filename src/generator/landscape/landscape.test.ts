@@ -7,6 +7,7 @@ import {
   MAX_AXIS,
   clampLandscapeSettings,
   generateLandscape,
+  scaleMetricLengths,
 } from "./index";
 import type { LandscapeSettings } from "./types";
 
@@ -192,6 +193,31 @@ describe("landscape generator", () => {
     expect(near).toBeGreaterThan(0);
     expect(far).toBeGreaterThan(0);
     expect(Math.min(near, far) / Math.max(near, far)).toBeGreaterThan(0.25);
+  });
+
+  it("keeps the landscape identical when lengths follow the voxel size", () => {
+    const base = settings({ seed: "linked", size: { x: 64, y: 64, z: 64 } });
+    const coarse = generateLandscape(base);
+    // Ten times finer voxels with every length scaled down by the same factor has to
+    // describe a ten times smaller world holding the exact same shape.
+    const fine = generateLandscape(scaleMetricLengths({ ...base, metersPerVoxel: 0.1 }, 0.1));
+    expect(fine.stats.extent.x).toBeCloseTo(coarse.stats.extent.x / 10, 3);
+    expect(fine.stats.terrainVoxels).toBe(coarse.stats.terrainVoxels);
+    expect(fine.stats.trees).toBe(coarse.stats.trees);
+    expect(fine.stats.voxels).toBe(coarse.stats.voxels);
+  });
+
+  it("allows sub metre lengths so miniature scenes stay expressible", () => {
+    const clamped = clampLandscapeSettings({
+      ...DEFAULT_LANDSCAPE_SETTINGS,
+      terrain: { ...DEFAULT_LANDSCAPE_SETTINGS.terrain, scale: 2.6, crustDepth: 0.4 },
+      water: { ...DEFAULT_LANDSCAPE_SETTINGS.water, beach: 0.2 },
+      trees: { ...DEFAULT_LANDSCAPE_SETTINGS.trees, minHeight: 0.8, maxHeight: 1.6, crownRadius: 0.5, trunkThickness: 0.12 },
+    });
+    expect(clamped.terrain.scale).toBeCloseTo(2.6, 5);
+    expect(clamped.trees.minHeight).toBeCloseTo(0.8, 5);
+    expect(clamped.trees.crownRadius).toBeCloseTo(0.5, 5);
+    expect(clamped.water.beach).toBeCloseTo(0.2, 5);
   });
 
   it("keeps a metre based crust at least one voxel thick at coarse scales", () => {

@@ -12,6 +12,7 @@ import {
   clampLandscapeSettings,
   generateLandscapeAsync,
   randomSeedText,
+  scaleMetricLengths,
 } from "../generator/landscape";
 import type {
   LandscapeResult,
@@ -110,6 +111,7 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
   const { locale, t } = useI18n();
   const [settings, setSettings] = useState<LandscapeSettings>(loadSettings);
   const [autoPreview, setAutoPreview] = useState(() => localStorage.getItem("voxel-gallery.landscape-auto") !== "false");
+  const [scaleLengths, setScaleLengths] = useState(() => localStorage.getItem("voxel-gallery.landscape-link") !== "false");
   const [result, setResult] = useState<LandscapeResult | null>(null);
   const [preview, setPreview] = useState<Uint8Array | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -132,6 +134,24 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
   useEffect(() => {
     localStorage.setItem("voxel-gallery.landscape-auto", String(autoPreview));
   }, [autoPreview]);
+
+  useEffect(() => {
+    localStorage.setItem("voxel-gallery.landscape-link", String(scaleLengths));
+  }, [scaleLengths]);
+
+  /**
+   * A finer voxel covers less world, so keeping the real world sizes would push hills
+   * and trees far beyond what the map can show. Linked, the lengths shrink along with
+   * the voxel and the landscape simply means something smaller.
+   */
+  const changeScale = useCallback((next: number) => {
+    setSettings((current) => {
+      const rescaled = scaleLengths
+        ? scaleMetricLengths(current, next / current.metersPerVoxel)
+        : current;
+      return clampLandscapeSettings({ ...rescaled, metersPerVoxel: next });
+    });
+  }, [scaleLengths]);
 
   const generate = useCallback(async (next: LandscapeSettings) => {
     const runId = runIdRef.current + 1;
@@ -220,6 +240,8 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
   const treeVoxelHeight = settings.trees.minHeight / perVoxel;
   const treesTooTall = settings.trees.enabled && treeVoxelHeight > settings.size.z * 0.6;
   const neededZ = Math.min(MAX_AXIS, Math.ceil((treeVoxelHeight / 0.6) / 8) * 8);
+  // One hill wider than the whole map leaves nothing but a single smooth ramp.
+  const featureTooWide = settings.terrain.scale > Math.min(settings.size.x, settings.size.y) * perVoxel;
   const percent = (value: number) => `${Math.round(value * 100)} %`;
 
   return (
@@ -268,12 +290,16 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
           <select
             className="generator-select"
             value={String(settings.metersPerVoxel)}
-            onChange={(event) => update({ metersPerVoxel: Number(event.target.value) })}
+            onChange={(event) => changeScale(Number(event.target.value))}
           >
             {METERS_PER_VOXEL_STEPS.map((step) => (
               <option key={step} value={String(step)}>{t("lsScaleOption", { meters: step })}</option>
             ))}
           </select>
+          <label className="landscape-check">
+            <input type="checkbox" checked={scaleLengths} onChange={(event) => setScaleLengths(event.target.checked)} />
+            <span>{t("lsScaleLinked")}</span>
+          </label>
           <p className="landscape-extent">
             {t("lsExtent", {
               x: Number((settings.size.x * perVoxel).toFixed(1)),
@@ -281,6 +307,14 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
               z: Number((settings.size.z * perVoxel).toFixed(1)),
             })}
           </p>
+          {featureTooWide && (
+            <p className="landscape-hint">
+              {t("lsFeatureTooWide", {
+                feature: Number(settings.terrain.scale.toFixed(1)),
+                world: Number((Math.min(settings.size.x, settings.size.y) * perVoxel).toFixed(1)),
+              })}
+            </p>
+          )}
 
           <details className="landscape-group" open>
             <summary>{t("lsTerrain")}</summary>

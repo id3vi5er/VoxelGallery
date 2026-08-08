@@ -57,9 +57,11 @@ export interface Limit {
   step: number;
 }
 
+// Lengths are metric and a voxel can be as small as 0.1 m, so the lower bounds have
+// to reach well below a metre — otherwise a miniature scene cannot be expressed.
 export const LANDSCAPE_LIMITS = {
   size: { min: MIN_AXIS, max: MAX_AXIS, step: 8 },
-  scale: { min: 6, max: 90, step: 1 },
+  scale: { min: 0.5, max: 120, step: 0.5 },
   octaves: { min: 1, max: 8, step: 1 },
   persistence: { min: 0.2, max: 0.85, step: 0.01 },
   lacunarity: { min: 1.4, max: 3.4, step: 0.05 },
@@ -69,18 +71,18 @@ export const LANDSCAPE_LIMITS = {
   warp: { min: 0, max: 1.5, step: 0.05 },
   terraces: { min: 0, max: 16, step: 1 },
   erosion: { min: 0, max: 8, step: 1 },
-  crustDepth: { min: 0, max: 32, step: 1 },
+  crustDepth: { min: 0, max: 32, step: 0.25 },
   waterLevel: { min: 0, max: 0.8, step: 0.01 },
-  beach: { min: 0, max: 8, step: 1 },
+  beach: { min: 0, max: 12, step: 0.25 },
   snowLine: { min: 0.3, max: 1, step: 0.01 },
   density: { min: 0, max: 1, step: 0.01 },
-  treeHeight: { min: 3, max: 60, step: 1 },
+  treeHeight: { min: 0.3, max: 60, step: 0.1 },
   branchAngle: { min: 10, max: 70, step: 1 },
   iterations: { min: 1, max: 7, step: 1 },
   branchSplit: { min: 2, max: 5, step: 1 },
   lengthFalloff: { min: 0.45, max: 0.95, step: 0.01 },
-  trunkThickness: { min: 0.4, max: 5, step: 0.1 },
-  crownRadius: { min: 1, max: 12, step: 0.5 },
+  trunkThickness: { min: 0.02, max: 5, step: 0.02 },
+  crownRadius: { min: 0.1, max: 20, step: 0.1 },
   leafDensity: { min: 0.05, max: 1, step: 0.01 },
   slopeLimit: { min: 0, max: 1, step: 0.01 },
   treeLine: { min: 0.1, max: 1, step: 0.01 },
@@ -96,8 +98,8 @@ function clamp(value: number, limit: Limit): number {
 /** Keeps every value inside the range the generator and the VOX format can handle. */
 export function clampLandscapeSettings(settings: LandscapeSettings): LandscapeSettings {
   const limits = LANDSCAPE_LIMITS;
-  const minHeight = clamp(Math.round(settings.trees.minHeight), limits.treeHeight);
-  const maxHeight = Math.max(minHeight, clamp(Math.round(settings.trees.maxHeight), limits.treeHeight));
+  const minHeight = clamp(settings.trees.minHeight, limits.treeHeight);
+  const maxHeight = Math.max(minHeight, clamp(settings.trees.maxHeight, limits.treeHeight));
   return {
     ...settings,
     seed: settings.seed.slice(0, 64),
@@ -122,12 +124,12 @@ export function clampLandscapeSettings(settings: LandscapeSettings): LandscapeSe
       warp: clamp(settings.terrain.warp, limits.warp),
       terraces: Math.round(clamp(settings.terrain.terraces, limits.terraces)),
       erosion: Math.round(clamp(settings.terrain.erosion, limits.erosion)),
-      crustDepth: Math.round(clamp(settings.terrain.crustDepth, limits.crustDepth)),
+      crustDepth: clamp(settings.terrain.crustDepth, limits.crustDepth),
     },
     water: {
       ...settings.water,
       level: clamp(settings.water.level, limits.waterLevel),
-      beach: Math.round(clamp(settings.water.beach, limits.beach)),
+      beach: clamp(settings.water.beach, limits.beach),
     },
     trees: {
       ...settings.trees,
@@ -151,6 +153,35 @@ export function clampLandscapeSettings(settings: LandscapeSettings): LandscapeSe
       flowers: clamp(settings.scatter.flowers, limits.scatter),
     },
   };
+}
+
+/**
+ * Multiplies every metric length by `factor`.
+ *
+ * A finer voxel scale means the same grid covers less world, so real world sizes
+ * quickly outgrow the map: at 0.1 m per voxel a 96 wide grid spans 9.6 m, while a
+ * 26 m hill and an 8 m tree do not remotely fit into it. Scaling the lengths along
+ * with the voxel size keeps the composition identical and only reinterprets how much
+ * world a voxel stands for.
+ */
+export function scaleMetricLengths(settings: LandscapeSettings, factor: number): LandscapeSettings {
+  if (!Number.isFinite(factor) || factor === 1) return settings;
+  return clampLandscapeSettings({
+    ...settings,
+    terrain: {
+      ...settings.terrain,
+      scale: settings.terrain.scale * factor,
+      crustDepth: settings.terrain.crustDepth * factor,
+    },
+    water: { ...settings.water, beach: settings.water.beach * factor },
+    trees: {
+      ...settings.trees,
+      minHeight: settings.trees.minHeight * factor,
+      maxHeight: settings.trees.maxHeight * factor,
+      trunkThickness: settings.trees.trunkThickness * factor,
+      crownRadius: settings.trees.crownRadius * factor,
+    },
+  });
 }
 
 /**

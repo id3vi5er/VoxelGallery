@@ -19,6 +19,7 @@ export {
   MIN_METERS_PER_VOXEL,
   MAX_METERS_PER_VOXEL,
   clampLandscapeSettings,
+  scaleMetricLengths,
   toVoxelUnits,
 } from "./settings";
 export type { LandscapePreset, Limit } from "./settings";
