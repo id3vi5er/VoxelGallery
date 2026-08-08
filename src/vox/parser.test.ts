@@ -81,7 +81,7 @@ describe("parseVox", () => {
     );
     const result = buildVoxGeometry(parseVox(data));
     expect(result.voxelCount).toBe(2);
-    expect(result.geometry.getIndex()?.count).toBe(60);
+    expect(result.geometry.getIndex()?.count).toBe(36);
     result.geometry.dispose();
   });
 

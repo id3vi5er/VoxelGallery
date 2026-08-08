@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { LibraryFolder, Vector3Tuple, VoxSceneData } from "../types";
+import type { LibraryFolder, Vector3Tuple } from "../types";
 import type { GeneratedVoxelScene, LlmConfig, PromptOptions } from "../generator/types";
 import { generateWithLlm } from "../generator/llm";
 import { generateOffline } from "../generator/offline";
 import { createGeneratedVoxFile, saveGeneratedVox } from "../generator/voxExport";
-import { parseVox } from "../vox/parser";
 import { CloseIcon, CubeIcon, SettingsIcon, WandIcon } from "./icons";
 import { Viewer3D } from "./Viewer3D";
 import { useI18n } from "../lib/i18n";
@@ -50,7 +49,7 @@ export function GeneratorModal({ libraries, onClose, onSaved }: GeneratorModalPr
   const [options, setOptions] = useState<PromptOptions>({ size: { x: 16, y: 16, z: 16 }, detail: "balanced", extraInstructions: "" });
   const [config, setConfig] = useState<LlmConfig>(loadConfig);
   const [scene, setScene] = useState<GeneratedVoxelScene | null>(null);
-  const [preview, setPreview] = useState<VoxSceneData | null>(null);
+  const [preview, setPreview] = useState<Uint8Array | null>(null);
   const [selectedLibrary, setSelectedLibrary] = useState(libraries[0]?.id ?? "");
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -86,7 +85,7 @@ export function GeneratorModal({ libraries, onClose, onSaved }: GeneratorModalPr
       const result = config.mode === "offline"
         ? { scene: await generateOffline(prompt, options.size), duplicatesRemoved: 0 }
         : await generateWithLlm(prompt, config, options);
-      const nextPreview = parseVox(createGeneratedVoxFile(result.scene));
+      const nextPreview = createGeneratedVoxFile(result.scene);
       setScene(result.scene);
       setPreview(nextPreview);
       const duplicates = result.duplicatesRemoved ? t("duplicatesRemoved", { count: result.duplicatesRemoved }) : "";
@@ -156,7 +155,7 @@ export function GeneratorModal({ libraries, onClose, onSaved }: GeneratorModalPr
         </aside>
 
         <section className="generator-preview">
-          {preview ? <Viewer3D data={preview} onStats={onStats} /> : <div className="generator-empty"><CubeIcon /><h3>{t("readyIdea")}</h3><p>{t("previewAppears")}</p></div>}
+          {preview ? <Viewer3D bytes={preview} onStats={onStats} /> : <div className="generator-empty"><CubeIcon /><h3>{t("readyIdea")}</h3><p>{t("previewAppears")}</p></div>}
           {stats && <div className="generator-stats"><span>{stats.voxels.toLocaleString(locale)} {t("voxels")}</span><span>{stats.dimensions.join(" × ")}</span></div>}
         </section>
 

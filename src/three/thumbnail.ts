@@ -1,8 +1,8 @@
 import * as THREE from "three";
-import type { AssetColorMetadata, VoxSceneData } from "../types";
-import { buildVoxGeometry, createVoxMaterial } from "../vox/geometry";
+import type { AssetColorMetadata } from "../types";
+import { createVoxMaterial, PreviewBudgetError } from "../vox/geometry";
 import { cacheMetadata, cacheThumbnail, getCachedMetadata, getCachedThumbnail } from "../lib/thumbnailCache";
-import { analyzeSceneColors } from "../vox/colors";
+import { prepareVoxPreview, type PreparedVoxPreview } from "../lib/preview";
 
 export interface ThumbnailResult {
   blob: Blob;
@@ -13,7 +13,7 @@ class ThumbnailRenderer {
   private renderer: THREE.WebGLRenderer | null = null;
   private queue: Promise<void> = Promise.resolve();
 
-  async get(key: string, createScene: () => Promise<VoxSceneData>, signal?: AbortSignal): Promise<ThumbnailResult> {
+  async get(key: string, createBytes: () => Promise<Uint8Array>, signal?: AbortSignal): Promise<ThumbnailResult> {
     const ensureActive = () => {
       if (signal?.aborted) throw new Error("Thumbnail-Anfrage wurde abgebrochen.");
     };
@@ -27,10 +27,17 @@ class ThumbnailRenderer {
 
     const request = this.queue.then(async () => {
       ensureActive();
-      const scene = await createScene();
+      const bytes = await createBytes();
       ensureActive();
-      const metadata = analyzeSceneColors(scene);
-      const blob = cached ?? await this.render(scene);
+      let preview: PreparedVoxPreview;
+      try {
+        preview = await prepareVoxPreview(bytes, "exact", signal, key);
+      } catch (error) {
+        if (!(error instanceof PreviewBudgetError)) throw error;
+        preview = await prepareVoxPreview(bytes, "performance", signal, key);
+      }
+      const metadata = preview.metadata;
+      const blob = cached ?? await this.render(preview);
       ensureActive();
       await Promise.all([cacheThumbnail(key, blob), cacheMetadata(key, metadata)]);
       return { blob, metadata };
@@ -39,7 +46,7 @@ class ThumbnailRenderer {
     return request;
   }
 
-  private async render(data: VoxSceneData): Promise<Blob> {
+  private async render(data: PreparedVoxPreview): Promise<Blob> {
     if (!this.renderer) {
       this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
       this.renderer.setPixelRatio(1);
@@ -58,11 +65,23 @@ class ThumbnailRenderer {
     fillLight.position.set(-5, 2, -4);
     scene.add(fillLight);
 
-    const { geometry } = buildVoxGeometry(data);
     const material = createVoxMaterial();
-    const mesh = new THREE.Mesh(geometry, material);
-    scene.add(mesh);
-    const box = geometry.boundingBox ?? new THREE.Box3().setFromObject(mesh);
+    const geometries: THREE.BufferGeometry[] = [];
+    for (const chunk of data.chunks) {
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(chunk.positions, 3));
+      geometry.setAttribute("normal", new THREE.Int8BufferAttribute(chunk.normals, 3, true));
+      geometry.setAttribute("color", new THREE.Uint8BufferAttribute(chunk.colors, 3, true));
+      geometry.setIndex(new THREE.BufferAttribute(chunk.indices, 1));
+      geometries.push(geometry);
+      const group = data.instances.find((candidate) => candidate.modelId === chunk.modelId);
+      if (!group) continue;
+      const mesh = new THREE.InstancedMesh(geometry, material, group.matrices.length / 16);
+      for (let index = 0; index < group.matrices.length / 16; index += 1) mesh.setMatrixAt(index, new THREE.Matrix4().fromArray(group.matrices, index * 16));
+      mesh.instanceMatrix.needsUpdate = true;
+      scene.add(mesh);
+    }
+    const box = new THREE.Box3(new THREE.Vector3().fromArray(data.bounds.min), new THREE.Vector3().fromArray(data.bounds.max));
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
     const extent = Math.max(size.x, size.y, size.z, 1);
@@ -78,7 +97,7 @@ class ThumbnailRenderer {
         0.88,
       );
     });
-    geometry.dispose();
+    for (const geometry of geometries) geometry.dispose();
     material.dispose();
     return blob;
   }

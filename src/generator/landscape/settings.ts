@@ -5,9 +5,6 @@ export const MAX_AXIS = 256;
 export const MIN_AXIS = 16;
 /** The Tauri save command rejects files above 10 MB (4 bytes per voxel plus header). */
 export const MAX_SAVE_VOXELS = 2_400_000;
-/** Face budget of the shared preview mesher. */
-export const PREVIEW_FACE_BUDGET = 700_000;
-
 /** Selectable voxel scales from coarse world building to fine detail. */
 export const METERS_PER_VOXEL_STEPS = [10, 5, 2.5, 2, 1, 0.5, 0.25, 0.2, 0.1] as const;
 export const MIN_METERS_PER_VOXEL = 0.1;

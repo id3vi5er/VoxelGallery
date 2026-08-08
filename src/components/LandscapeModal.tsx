@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { LibraryFolder, Vector3Tuple, VoxSceneData } from "../types";
+import type { LibraryFolder, Vector3Tuple } from "../types";
 import { createGeneratedVoxFile, saveGeneratedVox } from "../generator/voxExport";
 import {
   DEFAULT_LANDSCAPE_SETTINGS,
@@ -9,7 +9,6 @@ import {
   MAX_SAVE_VOXELS,
   METERS_PER_VOXEL_STEPS,
   MIN_AXIS,
-  PREVIEW_FACE_BUDGET,
   clampLandscapeSettings,
   generateLandscapeAsync,
   randomSeedText,
@@ -25,7 +24,6 @@ import type {
   TreeAlgorithm,
   TreeSettings,
 } from "../generator/landscape";
-import { parseVox } from "../vox/parser";
 import { CloseIcon, CubeIcon, DiceIcon, ResetIcon, TreeIcon } from "./icons";
 import { Viewer3D } from "./Viewer3D";
 import { useI18n } from "../lib/i18n";
@@ -113,7 +111,7 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
   const [settings, setSettings] = useState<LandscapeSettings>(loadSettings);
   const [autoPreview, setAutoPreview] = useState(() => localStorage.getItem("voxel-gallery.landscape-auto") !== "false");
   const [result, setResult] = useState<LandscapeResult | null>(null);
-  const [preview, setPreview] = useState<VoxSceneData | null>(null);
+  const [preview, setPreview] = useState<Uint8Array | null>(null);
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [selectedLibrary, setSelectedLibrary] = useState(libraries[0]?.id ?? "");
@@ -144,11 +142,7 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
       const generated = await generateLandscapeAsync(next);
       if (runIdRef.current !== runId) return;
       setResult(generated);
-      setPreview(
-        generated.stats.surfaceFaces <= PREVIEW_FACE_BUDGET
-          ? parseVox(createGeneratedVoxFile(generated.scene))
-          : null,
-      );
+      setPreview(createGeneratedVoxFile(generated.scene));
       setMessage({
         kind: "success",
         text: t("lsGenerated", {
@@ -372,7 +366,7 @@ export function LandscapeModal({ libraries, onClose, onSaved }: LandscapeModalPr
         </aside>
 
         <section className="generator-preview">
-          {preview ? <Viewer3D data={preview} onStats={onStats} /> : (
+          {preview ? <Viewer3D bytes={preview} onStats={onStats} /> : (
             <div className="generator-empty">
               <CubeIcon />
               <h3>{stats ? t("lsPreviewOff") : t("lsEmptyTitle")}</h3>

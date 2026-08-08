@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { AssetColorMetadata, VoxAsset } from "../types";
-import { loadVoxScene } from "../lib/sceneLoader";
+import { readVoxFile } from "../lib/tauri";
 import { thumbnailRenderer } from "../three/thumbnail";
 import { CubeIcon } from "./icons";
 import { useI18n } from "../lib/i18n";
@@ -34,7 +34,7 @@ export function VoxelCard({ asset, onOpen, knownError, onError, onReady, onMetad
     setError(knownError ?? null);
     if (knownError) return () => abortController.abort();
     void thumbnailRenderer
-      .get(asset.thumbnailKey, () => loadVoxScene(asset), abortController.signal)
+      .get(asset.thumbnailKey, () => readVoxFile(asset.path), abortController.signal)
       .then((result) => {
         if (!active) return;
         objectUrl = URL.createObjectURL(result.blob);

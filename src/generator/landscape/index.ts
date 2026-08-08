@@ -18,7 +18,6 @@ export {
   METERS_PER_VOXEL_STEPS,
   MIN_METERS_PER_VOXEL,
   MAX_METERS_PER_VOXEL,
-  PREVIEW_FACE_BUDGET,
   clampLandscapeSettings,
   toVoxelUnits,
 } from "./settings";

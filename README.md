@@ -54,9 +54,9 @@ Windows WebView2 is required. It is already present on current Windows 10 and Wi
 
 ### Large-file safety
 
-VOX data is transferred through binary IPC instead of JSON arrays. Parsing uses compact typed arrays, preview generation has explicit memory and face budgets, large scenes are not retained in the in-memory cache, and thumbnail work is cancellable. Files that exceed safe preview complexity are shown as unreadable instead of taking down the WebView.
+VOX data is transferred through binary IPC instead of JSON arrays. Parsing and greedy surface meshing run in a Web Worker, repeated models use GPU instancing, and compact mesh attributes keep the UI responsive while large previews are prepared. Thumbnails automatically use a stable surface-colored level of detail when an exact mesh would be too large; the interactive viewer offers the same mode after an exact preview reaches its safety budget.
 
-The native reader accepts individual files up to 512 MB. A preview is currently limited to 20 million voxel records, 750,000 visible faces, and 64 MB of aggregate occupancy grids.
+The native reader accepts individual files up to 512 MB. A model is limited to 20 million voxel records, while generated mesh buffers have a 128 MB safety budget. Occupancy grids are bounded per unique model and released between models instead of accumulating across the whole scene.
 
 ## AI voxel generation
 

@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Vector3Tuple, VoxAsset, VoxSceneData } from "../types";
-import { loadVoxScene } from "../lib/sceneLoader";
-import { revealInExplorer } from "../lib/tauri";
+import { useCallback, useEffect, useState } from "react";
+import type { Vector3Tuple, VoxAsset } from "../types";
+import { readVoxFile, revealInExplorer } from "../lib/tauri";
 import { CloseIcon, CubeIcon, ExternalIcon } from "./icons";
 import { Viewer3D } from "./Viewer3D";
-import { analyzeSceneColors } from "../vox/colors";
 import { useI18n } from "../lib/i18n";
+import type { PreparedVoxPreview } from "../lib/preview";
 
 interface ViewerModalProps {
   asset: VoxAsset;
@@ -14,18 +13,21 @@ interface ViewerModalProps {
 
 export function ViewerModal({ asset, onClose }: ViewerModalProps) {
   const { locale, t } = useI18n();
-  const [scene, setScene] = useState<VoxSceneData | null>(null);
+  const [bytes, setBytes] = useState<Uint8Array | null>(null);
+  const [info, setInfo] = useState<PreparedVoxPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [stats, setStats] = useState<{ voxels: number; dimensions: Vector3Tuple } | null>(null);
   const [showPalette, setShowPalette] = useState(true);
-  const colorMetadata = useMemo(() => scene ? analyzeSceneColors(scene) : null, [scene]);
+  const colorMetadata = info?.metadata ?? null;
 
   useEffect(() => {
     let active = true;
-    setScene(null);
+    setBytes(null);
+    setInfo(null);
+    setStats(null);
     setError(null);
-    void loadVoxScene(asset)
-      .then((data) => active && setScene(data))
+    void readVoxFile(asset.path)
+      .then((data) => active && setBytes(data))
       .catch((reason) => active && setError(reason instanceof Error ? reason.message : String(reason)));
     return () => { active = false; };
   }, [asset]);
@@ -37,6 +39,7 @@ export function ViewerModal({ asset, onClose }: ViewerModalProps) {
   }, [onClose]);
 
   const onStats = useCallback((voxels: number, dimensions: Vector3Tuple) => setStats({ voxels, dimensions }), []);
+  const onInfo = useCallback((preview: PreparedVoxPreview) => setInfo(preview), []);
 
   return (
     <div className="viewer-modal" role="dialog" aria-modal="true" aria-label={t("viewAsset", { name: asset.name })}>
@@ -53,15 +56,15 @@ export function ViewerModal({ asset, onClose }: ViewerModalProps) {
         </div>
       </header>
       <main className="viewer-main">
-        {scene ? <><Viewer3D data={scene} onStats={onStats} />{showPalette && colorMetadata && <aside className="viewer-palette"><header><span>{t("usedColors")}</span><em>{colorMetadata.colorCount}</em></header><div>{colorMetadata.colors.map((color) => <div key={color.index}><i style={{ background: color.hex }} /><span><strong>{color.hex}</strong><small>{color.count.toLocaleString(locale)} {t("voxels")}</small></span><em>#{color.index}</em></div>)}</div></aside>}</> : error ? (
+        {bytes ? <><Viewer3D bytes={bytes} cacheKey={asset.thumbnailKey} onStats={onStats} onInfo={onInfo} />{showPalette && colorMetadata && <aside className="viewer-palette"><header><span>{t("usedColors")}</span><em>{colorMetadata.colorCount}</em></header><div>{colorMetadata.colors.map((color) => <div key={color.index}><i style={{ background: color.hex }} /><span><strong>{color.hex}</strong><small>{color.count.toLocaleString(locale)} {t("voxels")}</small></span><em>#{color.index}</em></div>)}</div></aside>}</> : error ? (
           <div className="viewer-message error-message"><CubeIcon /><h3>{t("openFailed")}</h3><p>{error}</p></div>
         ) : (
           <div className="viewer-message"><span className="spinner" /><p>{t("loadingModel")}</p></div>
         )}
       </main>
       <footer className="viewer-footer">
-        <span>VOX Version {scene?.version ?? "–"}</span>
-        <span>{scene?.models.length ?? "–"} {scene?.models.length === 1 ? t("model") : t("models")}</span>
+        <span>VOX Version {info?.version ?? "–"}</span>
+        <span>{info?.modelCount ?? "–"} {info?.modelCount === 1 ? t("model") : t("models")}</span>
         <span>{stats ? stats.voxels.toLocaleString(locale) : "–"} {t("voxels")}</span>
         <span>{stats ? `${stats.dimensions[0]} × ${stats.dimensions[1]} × ${stats.dimensions[2]}` : "–"}</span>
         <span className="path-label" title={asset.path}>{asset.path}</span>
